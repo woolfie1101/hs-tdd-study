@@ -304,15 +304,28 @@ public class PointServiceTest {
     @Test
     @DisplayName("포인트 조회 시 사용자의 포인트 정보가 정확히 반환되어야 한다")
     void 포인트조회_정상케이스() {
+        // 테스트 설명: 포인트 조회 기능의 기본 동작을 검증하는 테스트입니다.
+        // 사용자 ID로 포인트를 조회하면 해당 사용자의 정확한 포인트 정보가 반환되어야 합니다.
+
         // given
         long userId = 1L;
         long pointAmount = 1000L;
+        long updateMillis = System.currentTimeMillis();
+        UserPoint expectedUserPoint = new UserPoint(userId, pointAmount, updateMillis);
+
+        // 포인트 조회에 대한 가짜 응답
+        when(userPointTable.selectById(userId)).thenReturn(expectedUserPoint);
 
         // when
+        // 포인트 조회 메서드 호출
         UserPoint userPoint = pointService.getPoint(userId);
 
         // then
+        // 1. 조회된 사용자 ID가 예상한 값과 일치하는지 검증
         assertThat(userPoint.id()).isEqualTo(userId);
+        // 2. 조회된 포인트 금액이 예상한 값과 일치하는지 검증
         assertThat(userPoint.point()).isEqualTo(pointAmount);
+        // 3. 조회된 업데이트 시간이 예상한 값과 일치하는지 검증
+        assertThat(userPoint.updateMillis()).isEqualTo(updateMillis);
     }
 }
