@@ -109,4 +109,14 @@ public class PointService {
 
         return updatedUserPoint;
     }
+
+    /**
+     * 포인트 조회
+     *
+     * @param userId 유저 아이디
+     * @return the UserPoint
+     */
+    public UserPoint getPoint(long userId) {
+        return userPointTable.selectById(userId);
+    }
 }
