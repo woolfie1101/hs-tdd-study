@@ -300,4 +300,19 @@ public class PointServiceTest {
         UserPoint finalUserPoint = realUserPointTable.selectById(userId);
         assertThat(finalUserPoint.point()).isEqualTo(expectedFinalPoint);
     }
+
+    @Test
+    @DisplayName("포인트 조회 시 사용자의 포인트 정보가 정확히 반환되어야 한다")
+    void 포인트조회_정상케이스() {
+        // given
+        long userId = 1L;
+        long pointAmount = 1000L;
+
+        // when
+        UserPoint userPoint = pointService.getPoint(userId);
+
+        // then
+        assertThat(userPoint.id()).isEqualTo(userId);
+        assertThat(userPoint.point()).isEqualTo(pointAmount);
+    }
 }
