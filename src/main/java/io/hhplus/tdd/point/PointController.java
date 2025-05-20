@@ -36,7 +36,8 @@ public class PointController {
     public List<PointHistory> history(
             @PathVariable long id
     ) {
-        return List.of();
+        log.info("Retrieving point history for user {}", id);
+        return pointService.getPointHistory(id);
     }
 
     /**
