@@ -27,6 +27,7 @@ dependencies {
     annotationProcessor(libs.lombok)
     annotationProcessor(libs.spring.boot.configuration.processor)
     testImplementation(libs.spring.boot.starter.test)
+    implementation("org.apache.httpcomponents.client5:httpclient5:5.2.1")
 }
 
 // about source and compilation
