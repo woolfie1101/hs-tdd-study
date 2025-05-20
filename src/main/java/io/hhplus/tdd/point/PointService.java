@@ -4,6 +4,7 @@ import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -118,5 +119,15 @@ public class PointService {
      */
     public UserPoint getPoint(long userId) {
         return userPointTable.selectById(userId);
+    }
+
+    /**
+     * 포인트 내역 조회
+     *
+     * @param userId 유저 아이디
+     * @return 유저의 포인트 충전/사용 내역 목록
+     */
+    public List<PointHistory> getPointHistory(long userId) {
+        return pointHistoryTable.selectAllByUserId(userId);
     }
 }
