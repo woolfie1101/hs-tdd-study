@@ -4,11 +4,16 @@ import io.hhplus.tdd.database.PointHistoryTable;
 import io.hhplus.tdd.database.UserPointTable;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
 @Service
 public class PointService {
 
     private final UserPointTable userPointTable;
     private final PointHistoryTable pointHistoryTable;
+    private final ConcurrentHashMap<Long, Lock> userLocks = new ConcurrentHashMap<>();
 
     public PointService(UserPointTable userPointTable, PointHistoryTable pointHistoryTable) {
         this.userPointTable = userPointTable;
@@ -28,17 +33,30 @@ public class PointService {
             throw new IllegalArgumentException("Charge amount must be positive");
         }
 
-        // 사용자 포인트 조회
-        UserPoint userPoint = userPointTable.selectById(userId);
+        // 사용자별 락 획득 (없으면 새로 생성)
+        Lock userLock = userLocks.computeIfAbsent(userId, k -> new ReentrantLock());
 
-        // 새 포인트 계산
-        long newPointAmount = userPoint.point() + amount;
+        UserPoint updatedUserPoint;
+        long currentTimeMillis;
 
-        // 사용자 포인트 업데이트
-        long currentTimeMillis = System.currentTimeMillis();
-        UserPoint updatedUserPoint = userPointTable.insertOrUpdate(userId, newPointAmount);
+        // 락 획득
+        userLock.lock();
+        try {
+            // 사용자 포인트 조회
+            UserPoint userPoint = userPointTable.selectById(userId);
 
-        // 포인트 내역 추가
+            // 새 포인트 계산
+            long newPointAmount = userPoint.point() + amount;
+
+            // 사용자 포인트 업데이트
+            currentTimeMillis = System.currentTimeMillis();
+            updatedUserPoint = userPointTable.insertOrUpdate(userId, newPointAmount);
+        } finally {
+            // 락 해제 (finally 블록에서 항상 실행되도록)
+            userLock.unlock();
+        }
+
+        // 포인트 내역 추가 (락 밖에서 수행 - 동시성 이슈 없음)
         pointHistoryTable.insert(userId, amount, TransactionType.CHARGE, currentTimeMillis);
 
         return updatedUserPoint;
