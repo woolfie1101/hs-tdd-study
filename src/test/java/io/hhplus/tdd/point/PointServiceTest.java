@@ -328,4 +328,22 @@ public class PointServiceTest {
         // 3. 조회된 업데이트 시간이 예상한 값과 일치하는지 검증
         assertThat(userPoint.updateMillis()).isEqualTo(updateMillis);
     }
+
+    @Test
+    @DisplayName("포인트 내역 조회 시 사용자의 모든 포인트 내역이 정확히 반환되어야 한다")
+    void 포인트내역조회_정상케이스() {
+        // given
+        long userId = 1L;
+        List<PointHistory> expectedHistories = List.of(
+            new PointHistory(1L, userId, 1000L, TransactionType.CHARGE, System.currentTimeMillis()),
+            new PointHistory(2L, userId, 500L, TransactionType.USE, System.currentTimeMillis())
+        );
+
+        // when
+        List<PointHistory> histories = pointService.getPointHistory(userId);
+
+        // then
+        assertThat(histories).hasSize(2);
+        assertThat(histories).isEqualTo(expectedHistories);
+    }
 }
