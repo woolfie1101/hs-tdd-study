@@ -65,4 +65,27 @@ public class PointServiceTest {
         // 3. 포인트 충전 내역이 올바르게 기록되었는지 검증
         verify(pointHistoryTable).insert(eq(userId), eq(chargeAmount), eq(TransactionType.CHARGE), anyLong());
     }
+
+    @Test
+    @DisplayName("포인트 충전 시 충전 금액이 0 이하면 예외가 발생해야 한다")
+    void 포인트충전_음수나제로일때_예외발생() {
+        // 테스트 설명: 포인트 충전 시 유효하지 않은 금액에 대한 예외 처리를 검증하는 테스트입니다.
+        // 포인트는 양수만 충전 가능하므로, 0이나 음수로 충전 시도할 경우 적절한 예외가 발생하는지 확인합니다.
+
+        // given
+        long userId = 1L;
+        long invalidAmount = 0L;
+
+        // when & then
+        // 0 금액으로 충전 시도
+        assertThatThrownBy(() -> pointService.chargePoint(userId, invalidAmount))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Charge amount must be positive");
+
+        // Negative amount (음수 금액 테스트)
+        // 음수 금액으로 충전 시도
+        assertThatThrownBy(() -> pointService.chargePoint(userId, -100L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Charge amount must be positive");
+    }
 }
