@@ -23,6 +23,7 @@ public class PointService {
      * @return the updated UserPoint
      */
     public UserPoint chargePoint(long userId, long amount) {
+        // 유효성 검사(충전 금액이 0 이하인 경우)
         if (amount <= 0) {
             throw new IllegalArgumentException("Charge amount must be positive");
         }
