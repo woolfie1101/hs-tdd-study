@@ -240,4 +240,64 @@ public class PointServiceTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("Insufficient point balance");
     }
+
+    @Test
+    @DisplayName("동시에 여러 요청이 들어와도 포인트가 정확하게 사용되어야 한다")
+    void 포인트사용_동시요청_처리() throws Exception {
+        // 테스트 설명: 동시에 여러 요청이 들어와도 포인트가 정확하게 사용되는지 검증하는 테스트입니다.
+        // 여러 스레드에서 동시에 같은 사용자의 포인트를 사용할 때, 모든 사용 요청이 순차적으로 처리되어
+        // 최종 포인트 금액이 정확해야 하며, 잔액 부족으로 인한 오류가 발생하지 않아야 합니다.
+
+        // given
+        long userId = 1L;
+        long initialPoint = 1000L;
+        int threadCount = 5;
+        long useAmountPerThread = 100L;
+        long expectedFinalPoint = initialPoint - (threadCount * useAmountPerThread);
+
+        // 실제 테이블 구현체 사용 (목 대신)
+        UserPointTable realUserPointTable = new UserPointTable();
+        PointHistoryTable realPointHistoryTable = new PointHistoryTable();
+        PointService realPointService = new PointService(realUserPointTable, realPointHistoryTable);
+
+        // 초기 포인트 설정
+        realUserPointTable.insertOrUpdate(userId, initialPoint);
+
+        // 모든 스레드가 동시에 시작할 수 있도록 CountDownLatch 사용
+        CountDownLatch latch = new CountDownLatch(1);
+        ExecutorService executorService = Executors.newFixedThreadPool(threadCount);
+        List<Future<?>> futures = new ArrayList<>();
+
+        // when
+        // 여러 스레드에서 동시에 포인트 사용 요청
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(executorService.submit(() -> {
+                try {
+                    // 모든 스레드가 대기
+                    latch.await();
+                    // 포인트 사용 실행
+                    realPointService.usePoint(userId, useAmountPerThread);
+                    log.info("Thread {}: Using {} points from user {}", Thread.currentThread().getName(), useAmountPerThread, userId);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return null;
+            }));
+        }
+
+        // 모든 스레드 동시에 시작
+        latch.countDown();
+
+        // 모든 스레드 완료 대기
+        for (Future<?> future : futures) {
+            future.get();
+        }
+
+        executorService.shutdown();
+
+        // then
+        // 최종 포인트가 예상한 값과 일치하는지 검증
+        UserPoint finalUserPoint = realUserPointTable.selectById(userId);
+        assertThat(finalUserPoint.point()).isEqualTo(expectedFinalPoint);
+    }
 }
