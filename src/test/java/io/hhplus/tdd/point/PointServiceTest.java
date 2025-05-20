@@ -166,16 +166,78 @@ public class PointServiceTest {
     @Test
     @DisplayName("포인트 사용 시 사용자의 포인트가 정상적으로 차감되어야 한다")
     void 포인트사용_정상케이스() {
+        // 테스트 설명: 포인트 사용 기능의 기본 동작을 검증하는 테스트입니다.
+        // 사용자가 포인트를 사용하면 해당 금액만큼 포인트가 차감되어야 하고,
+        // 포인트 사용 내역이 히스토리에 정확히 기록되어야 합니다.
+
         // given
         long userId = 1L;
         long initialPoint = 1000L;
         long useAmount = 500L;
+        // 초기 포인트 설정
+        UserPoint initialUserPoint = new UserPoint(userId, initialPoint, System.currentTimeMillis());
+        // 사용 후 예상되는 포인트는 initialPoint - useAmount 입니다.
+        UserPoint expectedUserPoint = new UserPoint(userId, initialPoint - useAmount, System.currentTimeMillis());
+
+        // 1. 포인트 조회에 대한 가짜 응답
+        when(userPointTable.selectById(userId)).thenReturn(initialUserPoint);
+        // 2. 포인트 업데이트(사용)에 대한 가짜 응답
+        when(userPointTable.insertOrUpdate(eq(userId), eq(initialPoint - useAmount))).thenReturn(expectedUserPoint);
 
         // when
+        // 포인트 사용 메서드 호출
         UserPoint userPoint = pointService.usePoint(userId, useAmount);
 
         // then
+        // 1. 포인트 사용 후 사용자 포인트가 예상한 값과 일치하는지 검증
         assertThat(userPoint.point()).isEqualTo(initialPoint - useAmount);
+        // 2. 포인트 사용 후 사용자 ID가 예상한 값과 일치하는지 검증
         assertThat(userPoint.id()).isEqualTo(userId);
+        // 3. 포인트 사용 내역이 올바르게 기록되었는지 검증
+        verify(pointHistoryTable).insert(eq(userId), eq(useAmount), eq(TransactionType.USE), anyLong());
+    }
+
+    @Test
+    @DisplayName("포인트 사용 시 사용 금액이 0 이하면 예외가 발생해야 한다")
+    void 포인트사용_음수나제로일때_예외발생() {
+        // 테스트 설명: 포인트 사용 시 유효하지 않은 금액에 대한 예외 처리를 검증하는 테스트입니다.
+        // 포인트는 양수만 사용 가능하므로, 0이나 음수로 사용 시도할 경우 적절한 예외가 발생하는지 확인합니다.
+
+        // given
+        long userId = 1L;
+        long invalidAmount = 0L;
+
+        // when & then
+        // 0 금액으로 사용 시도
+        assertThatThrownBy(() -> pointService.usePoint(userId, invalidAmount))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Use amount must be positive");
+
+        // 음수 금액으로 사용 시도
+        assertThatThrownBy(() -> pointService.usePoint(userId, -100L))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Use amount must be positive");
+    }
+
+    @Test
+    @DisplayName("포인트 사용 시 잔액이 부족하면 예외가 발생해야 한다")
+    void 포인트사용_잔액부족_예외발생() {
+        // 테스트 설명: 포인트 사용 시 잔액 부족에 대한 예외 처리를 검증하는 테스트입니다.
+        // 사용자의 포인트 잔액보다 많은 금액을 사용하려고 할 때 적절한 예외가 발생하는지 확인합니다.
+
+        // given
+        long userId = 1L;
+        long currentPoint = 500L;
+        long useAmount = 1000L; // 현재 포인트보다 많은 금액
+        UserPoint userPoint = new UserPoint(userId, currentPoint, System.currentTimeMillis());
+
+        // 포인트 조회에 대한 가짜 응답
+        when(userPointTable.selectById(userId)).thenReturn(userPoint);
+
+        // when & then
+        // 잔액보다 많은 금액으로 사용 시도
+        assertThatThrownBy(() -> pointService.usePoint(userId, useAmount))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("Insufficient point balance");
     }
 }
