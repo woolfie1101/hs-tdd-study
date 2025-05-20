@@ -58,6 +58,7 @@ public class PointController {
             @PathVariable long id,
             @RequestBody long amount
     ) {
-        return new UserPoint(0, 0, 0);
+        log.info("Using {} points from user {}", amount, id);
+        return pointService.usePoint(id, amount);
     }
 }
