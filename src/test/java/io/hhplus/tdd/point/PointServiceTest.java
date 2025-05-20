@@ -332,6 +332,9 @@ public class PointServiceTest {
     @Test
     @DisplayName("포인트 내역 조회 시 사용자의 모든 포인트 내역이 정확히 반환되어야 한다")
     void 포인트내역조회_정상케이스() {
+        // 테스트 설명: 포인트 내역 조회 기능의 기본 동작을 검증하는 테스트입니다.
+        // 사용자 ID로 포인트 내역을 조회하면 해당 사용자의 모든 포인트 충전/사용 내역이 정확히 반환되어야 합니다.
+
         // given
         long userId = 1L;
         List<PointHistory> expectedHistories = List.of(
@@ -339,11 +342,17 @@ public class PointServiceTest {
             new PointHistory(2L, userId, 500L, TransactionType.USE, System.currentTimeMillis())
         );
 
+        // 포인트 내역 조회에 대한 가짜 응답
+        when(pointHistoryTable.selectAllByUserId(userId)).thenReturn(expectedHistories);
+
         // when
+        // 포인트 내역 조회 메서드 호출
         List<PointHistory> histories = pointService.getPointHistory(userId);
 
         // then
+        // 1. 조회된 포인트 내역 개수가 예상한 값과 일치하는지 검증
         assertThat(histories).hasSize(2);
+        // 2. 조회된 포인트 내역이 예상한 값과 일치하는지 검증
         assertThat(histories).isEqualTo(expectedHistories);
     }
 }
