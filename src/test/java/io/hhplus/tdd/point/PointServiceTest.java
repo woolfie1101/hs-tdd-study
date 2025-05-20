@@ -162,4 +162,20 @@ public class PointServiceTest {
         UserPoint finalUserPoint = realUserPointTable.selectById(userId);
         assertThat(finalUserPoint.point()).isEqualTo(expectedFinalPoint);
     }
+
+    @Test
+    @DisplayName("포인트 사용 시 사용자의 포인트가 정상적으로 차감되어야 한다")
+    void 포인트사용_정상케이스() {
+        // given
+        long userId = 1L;
+        long initialPoint = 1000L;
+        long useAmount = 500L;
+
+        // when
+        UserPoint userPoint = pointService.usePoint(userId, useAmount);
+
+        // then
+        assertThat(userPoint.point()).isEqualTo(initialPoint - useAmount);
+        assertThat(userPoint.id()).isEqualTo(userId);
+    }
 }
