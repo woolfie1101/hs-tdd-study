@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Function;
@@ -59,15 +60,10 @@ public class PointService {
         }
 
         // 헬퍼 메소드를 사용하여 락 로직 처리
+        // 잔액 부족 검사는 executeWithLock 내부에서 수행됨
         return executeWithLock(
             userId,
-            userPoint -> {
-                // 잔액 부족 검사
-                if (userPoint.point() < amount) {
-                    throw new IllegalArgumentException("Insufficient point balance");
-                }
-                return userPoint.point() - amount; // 사용 작업: 현재 포인트 - 사용 금액
-            },
+            userPoint -> userPoint.point() - amount, // 사용 작업: 현재 포인트 - 사용 금액
             TransactionType.USE,
             amount
         );
@@ -101,20 +97,35 @@ public class PointService {
      * @param transactionType 트랜잭션 타입 (충전 또는 사용)
      * @param amount 포인트 양
      * @return 업데이트된 UserPoint
+     * @throws RuntimeException 락 획득 타임아웃 또는 작업 실패 시
      */
     private UserPoint executeWithLock(long userId, Function<UserPoint, Long> operation, 
                                      TransactionType transactionType, long amount) {
+        // 사용자 포인트 미리 조회 (락 밖에서)
+        UserPoint userPoint = userPointTable.selectById(userId);
+
+        // 작업 수행 가능 여부 미리 확인 (락 밖에서)
+        // 포인트 사용 시 잔액 부족 여부 확인
+        if (transactionType == TransactionType.USE && userPoint.point() < amount) {
+            throw new IllegalArgumentException("Insufficient point balance");
+        }
+
         // 사용자별 락 획득 (없으면 새로 생성)
         Lock userLock = userLocks.computeIfAbsent(userId, k -> new ReentrantLock());
 
-        UserPoint updatedUserPoint;
-        long currentTimeMillis;
+        UserPoint updatedUserPoint = null;
+        long currentTimeMillis = System.currentTimeMillis();
+        boolean lockAcquired = false;
 
-        // 락 획득
-        userLock.lock();
         try {
-            // 사용자 포인트 조회
-            UserPoint userPoint = userPointTable.selectById(userId);
+            // 락 획득 시도 (1초 타임아웃)
+            lockAcquired = userLock.tryLock(1, TimeUnit.SECONDS);
+            if (!lockAcquired) {
+                throw new RuntimeException("Failed to acquire lock for user " + userId + " after timeout");
+            }
+
+            // 락 획득 후 최신 상태 다시 조회
+            userPoint = userPointTable.selectById(userId);
 
             // 작업 수행 및 새 포인트 계산
             long newPointAmount = operation.apply(userPoint);
@@ -122,13 +133,29 @@ public class PointService {
             // 사용자 포인트 업데이트
             currentTimeMillis = System.currentTimeMillis();
             updatedUserPoint = userPointTable.insertOrUpdate(userId, newPointAmount);
+
+            // 락 맵에서 불필요한 락 제거 (사용자당 최대 1개의 락만 유지)
+            if (userLocks.size() > 1000) { // 임의의 임계값
+                userLocks.clear();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Lock acquisition was interrupted", e);
         } finally {
             // 락 해제 (finally 블록에서 항상 실행되도록)
-            userLock.unlock();
+            if (lockAcquired) {
+                userLock.unlock();
+            }
+
+            // 포인트 내역 추가 (락 밖에서 수행 - 동시성 이슈 없음)
+            if (updatedUserPoint != null) {
+                pointHistoryTable.insert(userId, amount, transactionType, currentTimeMillis);
+            }
         }
 
-        // 포인트 내역 추가 (락 밖에서 수행 - 동시성 이슈 없음)
-        pointHistoryTable.insert(userId, amount, transactionType, currentTimeMillis);
+        if (updatedUserPoint == null) {
+            throw new RuntimeException("Failed to update user point");
+        }
 
         return updatedUserPoint;
     }
