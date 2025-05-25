@@ -101,38 +101,38 @@ public class PointService {
      */
     private UserPoint executeWithLock(long userId, Function<UserPoint, Long> operation, 
                                      TransactionType transactionType, long amount) {
-        // 사용자 포인트 미리 조회 (락 밖에서)
-        UserPoint userPoint = userPointTable.selectById(userId);
-
-        // 작업 수행 가능 여부 미리 확인 (락 밖에서)
-        // 포인트 사용 시 잔액 부족 여부 확인
-        if (transactionType == TransactionType.USE && userPoint.point() < amount) {
-            throw new IllegalArgumentException("Insufficient point balance");
-        }
-
         // 사용자별 락 획득 (없으면 새로 생성)
         Lock userLock = userLocks.computeIfAbsent(userId, k -> new ReentrantLock());
 
         UserPoint updatedUserPoint = null;
-        long currentTimeMillis = System.currentTimeMillis();
         boolean lockAcquired = false;
 
         try {
-            // 락 획득 시도 (1초 타임아웃)
-            lockAcquired = userLock.tryLock(1, TimeUnit.SECONDS);
+            // 락 획득 시도 (10초 타임아웃으로 증가)
+            lockAcquired = userLock.tryLock(10, TimeUnit.SECONDS);
             if (!lockAcquired) {
                 throw new RuntimeException("Failed to acquire lock for user " + userId + " after timeout");
             }
 
-            // 락 획득 후 최신 상태 다시 조회
-            userPoint = userPointTable.selectById(userId);
+            // 락 획득 후 최신 상태 조회
+            UserPoint userPoint = userPointTable.selectById(userId);
+
+            // 포인트 사용 시 잔액 부족 여부 확인 (락 안에서)
+            if (transactionType == TransactionType.USE && userPoint.point() < amount) {
+                throw new IllegalArgumentException("Insufficient point balance");
+            }
 
             // 작업 수행 및 새 포인트 계산
             long newPointAmount = operation.apply(userPoint);
 
             // 사용자 포인트 업데이트
-            currentTimeMillis = System.currentTimeMillis();
+            long currentTimeMillis = System.currentTimeMillis();
             updatedUserPoint = userPointTable.insertOrUpdate(userId, newPointAmount);
+
+            // 포인트 내역 추가 (락 안에서 수행하여 동시성 이슈 방지)
+            if (updatedUserPoint != null) {
+                pointHistoryTable.insert(userId, amount, transactionType, currentTimeMillis);
+            }
 
             // 락 맵에서 불필요한 락 제거 (사용자당 최대 1개의 락만 유지)
             if (userLocks.size() > 1000) { // 임의의 임계값
@@ -145,11 +145,6 @@ public class PointService {
             // 락 해제 (finally 블록에서 항상 실행되도록)
             if (lockAcquired) {
                 userLock.unlock();
-            }
-
-            // 포인트 내역 추가 (락 밖에서 수행 - 동시성 이슈 없음)
-            if (updatedUserPoint != null) {
-                pointHistoryTable.insert(userId, amount, transactionType, currentTimeMillis);
             }
         }
 
